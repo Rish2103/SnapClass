@@ -16,7 +16,10 @@ def home_screen():
     col1, col2 = st.columns(2, gap="large")
 
     with col1:
-        st.header("I'm a Student")
+        st.markdown(
+            '<h2 style="color:#071645;">I\'m a Student</h2>',
+            unsafe_allow_html=True,
+        )
         st.image("https://i.ibb.co/844D9Lrt/mascot-student.png", width=120)
         if st.button(
             "Student Login",
@@ -28,7 +31,10 @@ def home_screen():
             st.rerun()
 
     with col2:
-        st.header("I'm a Teacher")
+        st.markdown(
+            '<h2 style="color:#071645;">I\'m a Teacher</h2>',
+            unsafe_allow_html=True,
+        )
         st.image("https://i.ibb.co/CsmQQV6X/mascot-prof.png", width=145)
         if st.button(
             "Teacher Login",

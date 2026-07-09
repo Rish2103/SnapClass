@@ -14,3 +14,17 @@ def footer_home():
         """,
         unsafe_allow_html=True,
     )
+
+
+def footer_dashboard():
+
+    # --- FOOTER SECTION ---
+
+    st.markdown(
+        """
+        <div style="text-align: center; padding: 10px; color: black; font-size: 14px;">
+            Created with ❤️ by <span style="font-weight: bold; color: black;">Rishabh</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )

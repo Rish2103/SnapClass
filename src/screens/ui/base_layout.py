@@ -25,7 +25,7 @@ def style_background_dashboard():
         """
         <style>
             .stApp {
-                background-color: #5865F2 !important;
+                background-color: #E0E3FF !important;
             }
         </style>
         """,
@@ -41,13 +41,13 @@ def style_base_layout():
             @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap');
             /* Hide the main menu and footer */
                 
-            #MainMenu,footer,header{
-                visibility: hidden;
-            }
+            # #MainMenu,footer,header{
+            #     visibility: hidden;
+            # }
 
-            .block-container {
-                padding-top: 1rem !important;
-            }
+            # .block-container {
+            #     padding-top: 1rem !important;
+            # }
 
             h1{
                 font-family: 'Climate Crisis', sans-serif !important;
@@ -63,7 +63,7 @@ def style_base_layout():
                 line-height: 1 !important;
                 margin-bottom: 0rem !important;
                 letter-spacing: 0.05em !important;
-                color: #071645 !important;
+                # color: #071645 !important;
             }
 
             h3,h4,p{
@@ -71,7 +71,7 @@ def style_base_layout():
             }
 
             button[kind="primary"] {
-                background:#5865F2 !important;
+                background-color:#5865F2 !important;
                 border-radius: 1.5rem !important;
                 color: white !important;
                 padding: 10px 20px !important;
@@ -80,7 +80,7 @@ def style_base_layout():
             }
             
             button[kind="secondary"] {
-                background:#EB459E !important;
+                background-color:#EB459E !important;
                 border-radius: 1.5rem !important;
                 color: white !important;
                 padding: 10px 20px !important;
@@ -88,7 +88,7 @@ def style_base_layout():
                 tranisiton: transform 0.25s ease-in-out !important;
             }
             button[kind="tertiary"] {
-                background:black !important;
+                background-color:black !important;
                 border-radius: 1.5rem !important;
                 color: white !important;
                 padding: 10px 20px !important;
