@@ -53,7 +53,7 @@ def process_bulk_audio(audio_bytes, candidates_dict, threshold=0.65):
         identified_results = {}
 
         for start, end in segments:
-            if (start - end) < sr * 0.5:
+            if (end - start) < sr * 0.5:
                 continue
 
             segment_audio = audio[start:end]

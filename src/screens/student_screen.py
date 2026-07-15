@@ -70,7 +70,7 @@ def student_dashbard():
 
         stats_map[sid]["total"] += 1
 
-        if logs.get("is_present"):
+        if log.get("is_present"):
             stats_map[sid]["attended"] += 1
 
     cols = st.columns(2)
