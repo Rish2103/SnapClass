@@ -8,7 +8,9 @@ pandas
 scikit-learn
 dlib-bin
 git+https://github.com/ageitgey/face_recognition_models
-setuptools
+# pin setuptools to a version that still provides pkg_resources
+# to avoid ModuleNotFoundError from packages that import pkg_resources
+setuptools<81
 
 supabase
 bcrypt
