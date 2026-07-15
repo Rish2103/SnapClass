@@ -1,14 +1,23 @@
 import numpy as np
-import dlib
-import face_recognition_models
-from sklearn.svm import SVC
 import streamlit as st
 
+
+from sklearn.svm import SVC
+from sklearn.calibration import CalibratedClassifierCV
 from src.database.db import get_all_students
 
 
 @st.cache_resource
 def load_dlib_models():
+    try:
+        import dlib
+        import face_recognition_models
+    except Exception as e:
+        st.error(
+            "Face recognition models unavailable in this environment: {}".format(e)
+        )
+        return None, None, None
+
     detector = dlib.get_frontal_face_detector()
 
     sp = dlib.shape_predictor(face_recognition_models.pose_predictor_model_location())
@@ -22,6 +31,11 @@ def load_dlib_models():
 
 def get_face_embedding(image_np):
     detector, sp, facerec = load_dlib_models()
+
+    # If native face models couldn't be loaded, return empty embeddings
+    if detector is None or sp is None or facerec is None:
+        return []
+
     faces = detector(image_np, 1)
 
     encodings = []
@@ -67,7 +81,9 @@ def get_trained_model():
         )
         return None
 
-    clf = SVC(kernel="linear", probability=True, class_weight="balanced")
+    # Use CalibratedClassifierCV to avoid the deprecated `probability=True` on SVC.
+    base_svc = SVC(kernel="linear", class_weight="balanced")
+    clf = CalibratedClassifierCV(base_svc, cv=3)
 
     try:
         clf.fit(X, y)

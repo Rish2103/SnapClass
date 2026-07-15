@@ -41,13 +41,13 @@ def style_base_layout():
             @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap');
             /* Hide the main menu and footer */
                 
-            # #MainMenu,footer,header{
-            #     visibility: hidden;
-            # }
+            #MainMenu,footer,header{
+                visibility: hidden;
+            }
 
-            # .block-container {
-            #     padding-top: 1rem !important;
-            # }
+            .block-container {
+                padding-top: 1rem !important;
+            }
 
             h1{
                 font-family: 'Climate Crisis', sans-serif !important;
