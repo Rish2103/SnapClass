@@ -16,16 +16,70 @@ def check_teacher_exists(username):
     response = supabase.table("teachers").select("*").eq("username", username).execute()
     return len(response.data) > 0
 
-def create_teacher(username,name,password):
+def validate_password_strength(password):
+    """
+    Validate password meets minimum security requirements.
+    Returns (is_valid: bool, message: str).
+    """
+    if len(password) < 8:
+        return False, "Password must be at least 8 characters long"
+    if not any(c.isupper() for c in password):
+        return False, "Password must contain at least one uppercase letter"
+    if not any(c.islower() for c in password):
+        return False, "Password must contain at least one lowercase letter"
+    if not any(c.isdigit() for c in password):
+        return False, "Password must contain at least one number"
+    return True, "Password is strong"
+
+def create_teacher(username, name, password, security_question=None, security_answer=None, email=None):
     data = {
         "username": username,
         "name": name,
-        "password": hash_pass(password)
+        "password": hash_pass(password),
     }
-    #Hash the password
-    #hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+    if email:
+        data["email"] = email.strip().lower()
+    if security_question and security_answer:
+        data["security_question"] = security_question
+        data["security_answer"] = hash_pass(security_answer.strip().lower())
     #Insert the new teacher into the database
     response = supabase.table("teachers").insert(data).execute()
+    return response.data
+
+def get_teacher_by_username(username):
+    """Fetch a teacher record by username. Returns the teacher dict or None."""
+    response = supabase.table("teachers").select("*").eq("username", username).execute()
+    if response.data:
+        return response.data[0]
+    return None
+
+def get_teacher_by_email(email):
+    """Fetch a teacher record by email. Returns the teacher dict or None."""
+    response = supabase.table("teachers").select("*").eq("email", email.strip().lower()).execute()
+    if response.data:
+        return response.data[0]
+    return None
+
+def verify_security_answer(username, answer):
+    """
+    Verify the security answer for a teacher's forgot password flow.
+    Returns (is_valid: bool, teacher: dict or None).
+    """
+    teacher = get_teacher_by_username(username)
+    if not teacher:
+        return False, None
+    stored_hash = teacher.get("security_answer")
+    if not stored_hash:
+        return False, None
+    is_correct = check_password(answer.strip().lower(), stored_hash)
+    if is_correct:
+        return True, teacher
+    return False, None
+
+def update_teacher_password(teacher_id, new_password):
+    """Update a teacher's password (hashed with bcrypt)."""
+    hashed = hash_pass(new_password)
+    response = supabase.table("teachers").update({"password": hashed}).eq("teacher_id", teacher_id).execute()
     return response.data
 
 def teacher_login(username, password):
@@ -48,6 +102,19 @@ def create_student(new_name,face_embedding,voice_embedding):
     data = {'name':new_name, 'face_embedding':face_embedding,'voice_embedding':voice_embedding}
     response = supabase.table('students').insert(data).execute()
     return response.data
+
+def update_student_face_embedding(student_id, face_embedding):
+    """Update face_embedding for an existing student by student_id."""
+    try:
+        sid = int(student_id)
+    except (ValueError, TypeError):
+        sid = student_id
+    try:
+        response = supabase.table('students').update({'face_embedding': face_embedding}).eq('student_id', sid).execute()
+        return response.data
+    except Exception as e:
+        print(f"Supabase UPDATE table 'students' error: {e}")
+        return None
 
 def create_subject(subject_code,name,section,teacher_id):
     data ={'subject_code' : subject_code, 'name' : name, 'section' : section, 'teacher_id' : teacher_id}
@@ -97,4 +164,4 @@ def create_attendance(logs):
 
 def get_attendance_for_teacher(teacher_id):
     response = supabase.table('attendance_logs').select('*,subjects!inner(*)').eq('subjects.teacher_id', teacher_id).execute()
-    return response.data
+    return response.data

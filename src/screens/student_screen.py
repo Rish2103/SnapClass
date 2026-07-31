@@ -14,9 +14,15 @@ from src.pipelines.face_pipeline import predict_attendance
 from src.database.db import get_all_students, create_student
 
 from src.pipelines.voice_pipeline import get_voice_embedding
-from src.pipelines.face_pipeline import get_face_embedding, train_classifier
-
+from src.pipelines.face_pipeline import (
+    get_face_embedding,
+    train_classifier,
+    verify_blink_liveness,
+    check_duplicate_face,
+)
+from src.database.db import update_student_face_embedding
 from src.screens.components.dialogue_enroll import create_subject_dialog
+from src.screens.components.dialogue_unenroll import confirm_unenroll_dialog
 
 from src.database.db import (
     get_student_subjects,
@@ -79,8 +85,12 @@ def student_dashbard():
         sid = sub_node["subject_id"]
 
         stats = stats_map.get(sid, {"total": 0, "attended": 0})
+        total_cls = stats["total"]
+        att_cls = stats["attended"]
+        pct_val = (att_cls / total_cls * 100.0) if total_cls > 0 else 100.0
+        is_safe = pct_val >= 75.0
 
-        def unenroll_btn(subject_id=sid, student_id_val=student_id):
+        def unenroll_btn(subject_name=sub["name"], subject_code=sub["subject_code"], subject_id=sid, student_id_val=student_id):
             if st.button(
                 "Unenroll from the course",
                 type="tertiary",
@@ -88,12 +98,7 @@ def student_dashbard():
                 key=f"unenroll_{subject_id}",
                 icon=":material/delete:",
             ):
-                unenroll_student_to_subject(student_id_val, subject_id)
-                st.success("Unenrolled successfully!")
-                import time
-
-                time.sleep(1)
-                st.rerun()
+                confirm_unenroll_dialog(subject_name, subject_code, student_id_val, subject_id)
 
         with cols[i % 2]:
             subject_card(
@@ -105,7 +110,35 @@ def student_dashbard():
                     ("✅", "Attended", stats["attended"]),
                 ],
                 footer_callback=unenroll_btn,
+                pct_badge=(pct_val, is_safe),
             )
+
+    st.space()
+    with st.expander("👤 Update your Registered Face Scan", expanded=False):
+        st.info("Re-scan your face to update your AI recognition profile.")
+        rescan_photo = st.camera_input("Take a fresh photo to update your face scan", key="rescan_cam")
+        if rescan_photo:
+            rescan_img = np.array(Image.open(rescan_photo))
+            with st.spinner("Processing new facial features..."):
+                encs = get_face_embedding(rescan_img)
+                if encs:
+                    res = update_student_face_embedding(student_id, encs[0].tolist())
+                    if res is not None:
+                        train_classifier()
+                        st.success("🎉 Facial profile updated successfully!")
+                    else:
+                        st.error("⚠️ Supabase Permission Setup Required: Database UPDATE policy is disabled on table 'students'.")
+                        st.markdown(
+                            """
+                            <div style="background:#FFF3CD; padding:15px; border-radius:12px; border-left:5px solid #FFC107; margin-top:10px;">
+                              <b>To enable face profile updates</b>, paste this SQL in your <b>Supabase Dashboard &rarr; SQL Editor</b>:
+                              <pre style="background:#282C34; color:#61AFEF; padding:10px; border-radius:8px; margin-top:8px;">ALTER TABLE students DISABLE ROW LEVEL SECURITY;</pre>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+                else:
+                    st.error("Could not extract facial features. Please ensure your face is well-lit.")
 
     footer_dashboard()
 
@@ -134,29 +167,82 @@ def student_screen():
     st.markdown(
         """
         <h2 style="color:#071645; text-align:center;">Login using Face Recognition</h2>
+        <p style="text-align:center; color:#555; font-size:14px;">
+          🔐 Two-step liveness verification to keep your account secure
+        </p>
         """,
         unsafe_allow_html=True,
     )
 
     st.space()
-    st.space()
+
+    # Initialize blink challenge state
+    if "blink_step" not in st.session_state:
+        st.session_state.blink_step = 1
+        st.session_state.blink_img_open = None
+
+    # --- Start Over button ---
+    if st.session_state.blink_step == 2:
+        if st.button("↩ Start Over", type="secondary", key="blink_start_over"):
+            st.session_state.blink_step = 1
+            st.session_state.blink_img_open = None
+            st.rerun()
 
     show_registration = False
-    photo_source = st.camera_input(
-        "Take a picture of your face to login", label_visibility="visible"
-    )
 
-    if photo_source:
-        img = np.array(Image.open(photo_source))
+    # ===== STEP 1: Eyes Open Photo =====
+    if st.session_state.blink_step == 1:
+        st.info("**Step 1 of 2**: Take a photo with your **eyes open** (look normally at the camera)")
 
-        with st.spinner("AI is scanning.."):
-            detected, all_ids, num_faces = predict_attendance(img)
+        photo_open = st.camera_input(
+            "Step 1: Take a photo with eyes OPEN", key="cam_eyes_open", label_visibility="visible"
+        )
 
-            if num_faces == 0:
-                st.warning("Face not found!")
-            elif num_faces > 1:
-                st.warning("Multiple faces found!")
+        if photo_open:
+            img_open = np.array(Image.open(photo_open))
+
+            with st.spinner("Checking face..."):
+                detected, all_ids, num_faces, *rest = predict_attendance(img_open)
+
+                if num_faces == 0:
+                    st.warning("No face detected! Please make sure your face is clearly visible.")
+                elif num_faces > 1:
+                    st.warning("Multiple faces detected! Please make sure only your face is visible.")
+                else:
+                    # Face found — store and move to step 2
+                    st.session_state.blink_img_open = img_open
+                    st.session_state.blink_step = 2
+                    st.rerun()
+
+    # ===== STEP 2: Eyes Closed Photo =====
+    elif st.session_state.blink_step == 2:
+        st.success("✅ Step 1 complete — face detected!")
+        st.info("**Step 2 of 2**: Now **close your eyes** and take another photo")
+
+        photo_closed = st.camera_input(
+            "Step 2: Close your eyes and take a photo", key="cam_eyes_closed", label_visibility="visible"
+        )
+
+        if photo_closed:
+            img_closed = np.array(Image.open(photo_closed))
+            img_open = st.session_state.blink_img_open
+
+            with st.spinner("Verifying liveness..."):
+                is_live, reason, details = verify_blink_liveness(img_open, img_closed)
+
+            if not is_live:
+                st.error(f"⚠️ Liveness check failed: {reason}")
+                st.caption("Please click **Start Over** and try again.")
+                # Reset for next attempt
+                st.session_state.blink_step = 1
+                st.session_state.blink_img_open = None
             else:
+                # Liveness passed — now identify the student
+                st.success("✅ Liveness verified! Identifying you...")
+
+                with st.spinner("Matching your face..."):
+                    detected, all_ids, num_faces, *rest = predict_attendance(img_open)
+
                 if detected:
                     student_id = list(detected.keys())[0]
                     all_students = get_all_students()
@@ -172,6 +258,10 @@ def student_screen():
                     )
 
                     if student:
+                        # Clean up blink state
+                        st.session_state.blink_step = 1
+                        st.session_state.blink_img_open = None
+
                         st.session_state.is_logged_in = True
                         st.session_state.user_role = "student"
                         st.session_state.student_data = student
@@ -180,10 +270,12 @@ def student_screen():
 
                         time.sleep(1)
                         st.rerun()
-
                 else:
                     st.error("Face not recognized! You might be a new student")
                     show_registration = True
+                    # Reset blink state
+                    st.session_state.blink_step = 1
+                    st.session_state.blink_img_open = None
 
     if show_registration:
         with st.container(border=True):
@@ -205,31 +297,39 @@ def student_screen():
             if st.button("Create Account", type="primary"):
                 if new_name:
                     with st.spinner("Creating profile.."):
-                        img = np.array(Image.open(photo_source))
+                        img = st.session_state.get("blink_img_open")
+                        if img is None:
+                            img = np.array(Image.open(photo_closed))
+
                         encodings = get_face_embedding(img)
+
                         if encodings:
-                            face_emb = encodings[0].tolist()
+                            is_dup, dup_name = check_duplicate_face(encodings[0])
+                            if is_dup:
+                                st.error(f"⚠️ Registration Blocked: This facial profile is already registered under student account '{dup_name}'!")
+                            else:
+                                face_emb = encodings[0].tolist()
 
-                            voice_emb = None
-                            if audio_data:
-                                voice_emb = get_voice_embedding(audio_data.read())
+                                voice_emb = None
+                                if audio_data:
+                                    voice_emb = get_voice_embedding(audio_data.read())
 
-                            response_data = create_student(
-                                new_name,
-                                face_embedding=face_emb,
-                                voice_embedding=voice_emb,
-                            )
+                                response_data = create_student(
+                                    new_name,
+                                    face_embedding=face_emb,
+                                    voice_embedding=voice_emb,
+                                )
 
-                            if response_data:
-                                train_classifier()
-                                st.session_state.is_logged_in = True
-                                st.session_state.user_role = "student"
-                                st.session_state.student_data = response_data[0]
-                                st.toast(f"Profile Created! Hi {new_name}")
-                                import time
+                                if response_data:
+                                    train_classifier()
+                                    st.session_state.is_logged_in = True
+                                    st.session_state.user_role = "student"
+                                    st.session_state.student_data = response_data[0]
+                                    st.toast(f"Profile Created! Hi {new_name}")
+                                    import time
 
-                                time.sleep(1)
-                                st.rerun()
+                                    time.sleep(1)
+                                    st.rerun()
                         else:
                             st.error(
                                 "Couldn't capture your facial features for facial recognition!"
@@ -237,3 +337,4 @@ def student_screen():
                 else:
                     st.warning("Please enter your name!")
     footer_dashboard()
+
